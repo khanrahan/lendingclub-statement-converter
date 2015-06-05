@@ -38,10 +38,6 @@ splits = {
         "section": "CASH DETAILS",
         "category": "Expenses:Service Fee:LendingClub"
     },
-    "Adjustments/Credits" : {
-        "section": "CASH DETAILS",
-        "category": "Income:LendingClub:Adjustments"
-    },
     "Collection Fees" : {
         "section": "CASH DETAILS",
         "category": "Expenses:Bank Charges:Collection Fees:LendingClub"
@@ -104,6 +100,7 @@ def findTextElement(obj, text):
         try:
             childText = child.get_text().strip()
             if child.get_text().strip() == text:
+            #if text.match(child.get_text().strip()):
                 return child
         except AttributeError:
             # No problem, the object must not be something with text
@@ -118,7 +115,8 @@ def findTextElement(obj, text):
     
 def findPageWithSection(pages, sectionTitle):
     for page in pages:
-        if findTextElement(page, sectionTitle) is not None:
+#       if findTextElement(page, sectionTitle) is not None:
+        if findTextElement(page, sectionTitle):
             return page
 
 def dumpPage(page):
@@ -170,7 +168,7 @@ def amountRightOf(obj, text):
     return amount
 
 def findStatementDate(obj):
-    dateRegex = re.compile("(\w+) [0-9][0-9]-([0-9][0-9])\. ([0-9][0-9][0-9][0-9])")
+    dateRegex = re.compile("(\w+) ([0-9][0-9]) ([0-9][0-9][0-9][0-9]) - (\w+) ([0-9][0-9]) ([0-9][0-9][0-9][0-9])")
     dates = findTextElement(obj, dateRegex)
     dateMatch = dateRegex.match(dates.get_text().strip())
     return parse_date("%s %s %s" % ( dateMatch.group(1), dateMatch.group(2), dateMatch.group(3)))
@@ -180,15 +178,22 @@ def calculateSplitAmounts(obj):
     for split in splits:
         pageWithSection = findPageWithSection(obj, splits[split]['section'])
         try:
-            amount = amountRightOf(pageWithSection, split)
-            newSplits[split] = splits[split].copy()
-            newSplits[split]['amount'] = amount
-            if newSplits[split]['amount']:
-                if 'sourceCategory' in splits[split]:
-                    newSplits[split + " source"] = {
-                        'category': splits[split]['sourceCategory'],
-                        'amount': newSplits[split]['amount'] * -1
-                    }
+            if pageWithSection:                  
+                '''added if statement - it is crashing
+                if the section doesn't exist in the page, and because the
+                exception is catching only one type, it was crashing the whole
+                script, so I just made sure that the section asked actually
+                existed in the page before running the rest of the code.. '''
+                
+                amount = amountRightOf(pageWithSection, split)
+                newSplits[split] = splits[split].copy()
+                newSplits[split]['amount'] = amount
+                if newSplits[split]['amount']:
+                    if 'sourceCategory' in splits[split]:
+                        newSplits[split + " source"] = {
+                            'category': splits[split]['sourceCategory'],
+                            'amount': newSplits[split]['amount'] * -1
+                        }
         except MissingTextElementException:
             print("Split %s was not found, so it will be ignored" % split, file=sys.stderr)
     
@@ -201,21 +206,21 @@ def totalSplits(splits):
             total += splits[split]['amount']
     return total
         
-
-pdf = readPdf(sys.argv[1])
-splits = calculateSplitAmounts(pdf)
-total = totalSplits(splits)
-
-print("!Type:Bank")
-date = findStatementDate(findPageWithSection(pdf, "CASH DETAILS"))
-print("D%s" % date.strftime("%m/%d/%Y"))
-print("T%s" % total)
-for split in splits:
-    if 'amount' in splits[split]:
-        splitAmount = splits[split]['amount']
-        category = splits[split]['category']
-        print("S%s" % category)
-        print("E%s" % split)
-        print("$%s" % splitAmount)
-        
-print("^")
+if __name__ == "__main__":
+    pdf = readPdf(sys.argv[1])
+    splits = calculateSplitAmounts(pdf)
+    total = totalSplits(splits)
+    
+    print("!Type:Bank")
+    date = findStatementDate(findPageWithSection(pdf, "CASH DETAILS"))
+    print("D%s" % date.strftime("%m/%d/%Y"))
+    print("T%s" % total)
+    for split in splits:
+        if 'amount' in splits[split]:
+            splitAmount = splits[split]['amount']
+            category = splits[split]['category']
+            print("S%s" % category)
+            print("E%s" % split)
+            print("$%s" % splitAmount)
+            
+    print("^")
